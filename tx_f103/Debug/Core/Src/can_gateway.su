@@ -1,0 +1,9 @@
+../Core/Src/can_gateway.c:9:6:CAN_Print_Error	264	static
+../Core/Src/can_gateway.c:24:9:CAN_Filter_Config_AllPass	48	static
+../Core/Src/can_gateway.c:49:10:CAN_MakeExtId	16	static
+../Core/Src/can_gateway.c:62:6:CAN_PackVital	16	static
+../Core/Src/can_gateway.c:74:6:CAN_PackLoadcell	16	static
+../Core/Src/can_gateway.c:86:9:CAN_SendRawWait	72	static
+../Core/Src/can_gateway.c:155:9:CAN_SendVital	48	static
+../Core/Src/can_gateway.c:175:9:CAN_SendLoadcell	48	static
+../Core/Src/can_gateway.c:195:6:HAL_CAN_ErrorCallback	16	static

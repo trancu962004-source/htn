@@ -1,0 +1,4 @@
+../Core/Src/uart_line.c:20:6:UART2_StartReceiveIT	2
+../Core/Src/uart_line.c:28:6:UART3_StartReceiveIT	2
+../Core/Src/uart_line.c:36:6:HAL_UART_RxCpltCallback	9
+../Core/Src/uart_line.c:98:6:HAL_UART_ErrorCallback	3
