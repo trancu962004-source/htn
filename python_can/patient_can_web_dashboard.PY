@@ -95,9 +95,12 @@ OFFLINE_CRITICAL_SEC = 15
 
 # Xác nhận ngưng chảy: DPM = 0 liên tục bao lâu mới cảnh báo
 INFUSION_STOP_CONFIRM_SEC = 20
-
+AUTO_REMOVE_PATIENT_SEC = 300   # 300 giây = 5 phút
 # Giảm báo động giả: cần cùng cảnh báo lặp lại N lần mới hiện critical/warning
 ALERT_CONFIRM_COUNT = 2
+
+# Hệ số dây truyền: 20 giọt = 1 ml
+DROP_FACTOR_GTT_PER_ML = 20
 
 
 @dataclass
@@ -213,6 +216,43 @@ def parse_loadcell_data(data: bytes) -> Loadcell:
         updated_at=time.time(),
     )
 
+
+
+
+def calculate_infusion_time(volume_ml: int, drops_per_min: int) -> dict:
+    """
+    Tính tốc độ ml/phút và thời gian truyền còn lại.
+    """
+    if volume_ml <= 0:
+        return {
+            "flow_ml_per_min": 0,
+            "remaining_minutes": 0,
+            "remaining_text": "Đã hết dịch"
+        }
+
+    if drops_per_min <= 0:
+        return {
+            "flow_ml_per_min": 0,
+            "remaining_minutes": None,
+            "remaining_text": "Đang ngưng chảy"
+        }
+
+    flow_ml_per_min = drops_per_min / DROP_FACTOR_GTT_PER_ML
+    remaining_minutes = volume_ml / flow_ml_per_min
+
+    hours = int(remaining_minutes // 60)
+    minutes = int(remaining_minutes % 60)
+
+    if hours > 0:
+        remain_text = f"Còn khoảng {hours} giờ {minutes} phút"
+    else:
+        remain_text = f"Còn khoảng {minutes} phút"
+
+    return {
+        "flow_ml_per_min": round(flow_ml_per_min, 2),
+        "remaining_minutes": round(remaining_minutes, 1),
+        "remaining_text": remain_text
+    }
 
 def new_alert(level: str, code: str, message: str, value: Any) -> Alert:
     return Alert(
@@ -360,7 +400,16 @@ def patient_to_dict(p: PatientState) -> dict:
         "bed": p.bed,
         "patient": p.patient,
         "vital": asdict(p.vital) if p.vital else None,
-        "loadcell": asdict(p.loadcell) if p.loadcell else None,
+        "loadcell": (
+            {
+                **asdict(p.loadcell),
+                "infusion": calculate_infusion_time(
+                    p.loadcell.volume_ml,
+                    p.loadcell.drops_per_min
+                )
+            }
+            if p.loadcell else None
+        ),
         "first_seen": p.first_seen,
         "last_seen": p.last_seen,
         "alerts": [asdict(a) for a in p.alerts],
@@ -421,16 +470,27 @@ def can_reader_thread(interface: str, channel: str, bitrate: int, print_raw: boo
             msg = bus.recv(timeout=1.0)
 
             if msg is None:
-                # Cập nhật cảnh báo offline mỗi giây
+    # Cập nhật cảnh báo offline mỗi giây + tự xóa bệnh nhân offline quá lâu
+                now = time.time()
+
                 with patients_lock:
-                    for p in patients.values():
-                        old_codes = [a.code for a in p.alerts]
-                        update_alerts(p)
-                        new_codes = [a.code for a in p.alerts]
-                        if old_codes != new_codes:
-                            print_patient(p)
-                            # polling web sẽ tự cập nhật mỗi 1 giây
+                    for key in list(patients.keys()):
+                        p = patients[key]
+                        offline_sec = now - p.last_seen
+
+            if offline_sec >= AUTO_REMOVE_PATIENT_SEC:
+                print(f"{p.key} | REMOVE: offline {offline_sec:.1f}s")
+                del patients[key]
                 continue
+
+            old_codes = [a.code for a in p.alerts]
+            update_alerts(p)
+            new_codes = [a.code for a in p.alerts]
+
+            if old_codes != new_codes:
+                print_patient(p)
+
+            continue
 
             if print_raw:
                 print(
@@ -999,7 +1059,7 @@ function render() {
                 v ? `HR ${v.hr} | SpO2 ${v.spo2}% | T ${Number(v.temp).toFixed(1)}°C | Pin ${v.battery}% | Seq ${v.seq}` : "-"
             }</div>
             <div class="row"><b>LOADCELL:</b> ${
-                l ? `${l.volume_ml} ml | ${l.drops_per_min} giọt/phút | Seq ${l.seq}` : "-"
+                l ? `${l.volume_ml} ml | ${l.drops_per_min} giọt/phút | ${l.infusion.flow_ml_per_min} ml/phút | ${l.infusion.remaining_text} | Seq ${l.seq}` : "-"
             }</div>
             <div class="row"><b>Cảnh báo:</b> ${
                 alerts.length === 0

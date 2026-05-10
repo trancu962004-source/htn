@@ -64,6 +64,7 @@ typedef struct {
     uint16_t ir;
     uint16_t red;
 } max30100_sample_t;
+
 esp_err_t max30100_read_reg_u8(max30100_t *dev, uint8_t reg, uint8_t *val);
 esp_err_t max30100_init(max30100_t *dev, i2c_port_t port, uint8_t addr);
 esp_err_t max30100_reset(max30100_t *dev);
